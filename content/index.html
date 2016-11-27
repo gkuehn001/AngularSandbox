@@ -9,8 +9,7 @@
     <div ng-repeat="product in store.products">
         <h1>{{product.name}}</h1>
         <em class="pull-right"><h2>{{product.price | currency}}</h2></em>
-        <!--img ng-src="{{product.images[0].thumb}}" /-->
-        <img src="images/Dodecahedron.png" />
+        <img ng-src="{{product.images[0].thumb}}" />
         <p>{{product.description | limitTo:50}}</p>
         <button ng-show="product.canPurchase">Add to cart</button>
     </div>
