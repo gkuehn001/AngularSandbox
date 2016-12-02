@@ -1,24 +1,23 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Security;
-using System.Security.Permissions;
 using System.Text;
-using System.Threading.Tasks;
+using System.Web.Hosting;
 
 namespace AngularSandbox
 {
     class Program
     {
+        private static AspNet _aspnet;
         private static HttpListener _listener;
-        private static string _contentDir = "content";
+        private static string _contentDir = @"E:\project\AngularSandbox\content";
         private static List<string> _lBinaryFiles = new List<string> {".7z",".bmp",".gif",".jpg",".jpeg",".png",".zip"}; // to be continued
 
         private static IDictionary<string, string> _mappings = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase) {
         #region Big freaking list of mime types
-        // combination of values from Windows 7 Registry and 
+        // combination of values from Windows 7 Registry and
         // from C:\Windows\System32\inetsrv\config\applicationHost.config
         // some added, including .7z and .dat
         {".323", "text/h323"},
@@ -602,6 +601,8 @@ namespace AngularSandbox
 
         static void Main(string[] args)
         {
+            _aspnet = (AspNet)ApplicationHost.CreateApplicationHost(typeof(AspNet), "/", _contentDir);
+
             _listener = new HttpListener();
             _listener.Prefixes.Add(String.Format("http://*:{0}/", 8080));
             _listener.Start();
@@ -615,43 +616,87 @@ namespace AngularSandbox
             context = _listener.EndGetContext(asyncResult);
             _listener.BeginGetContext(new AsyncCallback(ContextReceivedCallback), null);
 
-            //Console.WriteLine("Request für: {0}", context.Request.Url.LocalPath);
+            Console.WriteLine("Request für: {0}", context.Request.Url.LocalPath);
 
             // CAS (code access security) permission
-            PermissionSet ps = new PermissionSet(PermissionState.None);
-            ps.AddPermission(new FileIOPermission(FileIOPermissionAccess.Read, Path.Combine(Environment.CurrentDirectory, _contentDir)));
-            ps.PermitOnly();
+            //PermissionSet ps = new PermissionSet(PermissionState.None);
+            //ps.AddPermission(new FileIOPermission(FileIOPermissionAccess.Read, Path.Combine(Environment.CurrentDirectory, _contentDir)));
+            //ps.PermitOnly();
 
             ProcessRequest(context);
         }
 
         private static void ProcessRequest(HttpListenerContext ctx)
         {
-            string resourceName = ctx.Request.Url.LocalPath.Remove(0,1);            
-
-            byte[] responseBytes = null;
+            //string resourceName = ctx.Request.Url.LocalPath.Remove(0,1);
             string response = String.Empty;
 
-            // 'special' URLs
+            string resourceName = ctx.Request.Url.LocalPath.Remove(0, "/".Length);
+
+            //'special' URLs
             if (resourceName.Equals(String.Empty))
             {
-                resourceName += "index.html";
+                resourceName += "index.aspx";
             }
-            else if (resourceName == "time.cmd")
+            else
+            if (resourceName == "time.cmd")
             {
                 response = "Server Zeit: " + DateTime.Now.ToString();
             }
-                     
+
+
+            // informationen an ASP.NET AppDomain übergeben
+            // URL prefix entfernen
+
+            //_aspnet.ProcessRequest(resourceName, ctx.Request.Url.Query.Replace("?", ""), ctx.Response.OutputStream);
+
+            byte[] responseBytes = null;
             if (_lBinaryFiles.Contains(Path.GetExtension(resourceName)))
             {
-                responseBytes = GetResource(resourceName);               
+                responseBytes = GetResource(resourceName);
             }
             else
             {
-                string result = GetTextResource(resourceName);
-                if (result != null)
+                if (resourceName.EndsWith(".aspx"))
                 {
-                    responseBytes = Encoding.UTF8.GetBytes(result);
+                    _aspnet.ProcessRequest(resourceName, ctx.Request.Url.Query.Replace("?", ""), ctx.Response.OutputStream);
+                }
+                else
+                {
+                    if (resourceName.Equals("getGems"))
+                    {
+                        resourceName += ".json";
+                        var gems = new List<ProductGem>();
+                        {
+                            var gem = new ProductGem();
+                            gem.name = "Dodecahedron";
+                            gem.price = 2.3;
+                            gem.description = "In geometry, a dodecahedron is any polyhedron with twelve flat faces. The most familiar dodecahedron is the regular dodecahedron, which is a Platonic solid. There are also three regular star dodecahedra, which are constructed as stellations of the convex form. All of these have icosahedral symmetry, order 120.";
+                            gem.canPurchase = true;
+                            gem.soldOut = false;
+                            gem.image = new ProductImage { full = "images/Dodecahedron.png", thumb = "images/120px-Dodecahedron.png" };
+                            gems.Add(gem);
+                        }
+                        {
+                            var gem = new ProductGem();
+                            gem.name = "Pentagonal Gem";
+                            gem.price = 5.95;
+                            gem.description = "The most familiar dodecahedron is the regular dodecahedron, which is a Platonic solid. There are also three regular star dodecahedra, which are constructed as stellations of the convex form. All of these have icosahedral symmetry, order 120.";
+                            gem.canPurchase = false;
+                            gem.soldOut = false;
+                            gems.Add(gem);
+                        }
+                        string jsonString = JsonConvert.SerializeObject(gems);
+                        responseBytes = Encoding.UTF8.GetBytes(jsonString);
+                    }
+                    else
+                    {
+                        string result = GetTextResource(resourceName);
+                        if (result != null)
+                        {
+                            responseBytes = Encoding.UTF8.GetBytes(result);
+                        }
+                    }
                 }
             }
 
